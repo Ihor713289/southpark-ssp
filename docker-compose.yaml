@@ -1,0 +1,21 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: southpark-api
+    ports:
+      - "8080:8080"
+
+  consumer:
+    image: python:latest
+    container_name: southpark-consumer
+    ports:
+      - "2000:2000"
+
+  rabbitmq:
+    image: rabbitmq:latest
+    container_name: shop-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
