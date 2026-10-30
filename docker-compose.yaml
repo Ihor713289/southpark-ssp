@@ -4,18 +4,49 @@ services:
       context: .
       dockerfile: docker/api.Dockerfile
     container_name: southpark-api
+    env_file:
+      - path: api/.env
+        required: false
     ports:
       - "8080:8080"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: on-failure
 
   consumer:
-    image: python:latest
+    build:
+      context: .
+      dockerfile: docker/client.Dockerfile
     container_name: southpark-consumer
-    ports:
-      - "2000:2000"
+    env_file:
+      - path: client/.env
+        required: false
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: on-failure
+
+  producer:
+    build:
+      context: .
+      dockerfile: docker/producer.Dockerfile
+    container_name: southpark-producer
+    env_file:
+      - path: producer/.env
+        required: false
+    depends_on:
+      - api
+    restart: on-failure
 
   rabbitmq:
-    image: rabbitmq:latest
-    container_name: shop-rabbitmq
+    image: rabbitmq:4-management
+    container_name: southpark-rabbitmq
     ports:
       - "5672:5672"
       - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      retries: 10

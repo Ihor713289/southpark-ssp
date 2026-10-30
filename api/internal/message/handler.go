@@ -5,10 +5,14 @@ import (
 	"api/internal/common"
 	"context"
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
 )
+
+const maxBodyBytes = 1 << 20
 
 type MessageHandler struct {
 	MessageService MessageService
@@ -16,6 +20,14 @@ type MessageHandler struct {
 
 type MessageService interface {
 	Store(ctx context.Context, message domain.Message) (string, error)
+}
+
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
+type statusResponse struct {
+	Status string `json:"status"`
 }
 
 func NewMessageHandler(messageService MessageService) *MessageHandler {
@@ -33,15 +45,22 @@ func AddMessageHandlers(router *mux.Router, messageService MessageService) {
 func (handler *MessageHandler) storeMessage(w http.ResponseWriter, r *http.Request) {
 	var message domain.Message
 
-	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
-		common.WriteJSON(w, http.StatusUnprocessableEntity, err.Error())
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&message); err != nil {
+		common.WriteJSON(w, http.StatusBadRequest, errorResponse{"invalid JSON: " + err.Error()})
 		return
 	}
 
 	store, err := handler.MessageService.Store(r.Context(), message)
 	if err != nil {
-		common.WriteJSON(w, http.StatusInternalServerError, err.Error())
+		if errors.Is(err, domain.ErrInvalidMessage) {
+			common.WriteJSON(w, http.StatusUnprocessableEntity, errorResponse{err.Error()})
+			return
+		}
+		log.Printf("failed to store message: %v", err)
+		common.WriteJSON(w, http.StatusInternalServerError, errorResponse{"failed to publish message"})
 		return
 	}
-	common.WriteJSON(w, http.StatusCreated, store)
+	common.WriteJSON(w, http.StatusCreated, statusResponse{store})
 }

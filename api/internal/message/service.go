@@ -6,7 +6,7 @@ import (
 )
 
 type MessageRepository interface {
-	Store(message domain.Message) (string, error)
+	Store(ctx context.Context, message domain.Message) (string, error)
 }
 
 type DefaultMessageService struct {
@@ -18,5 +18,8 @@ func NewDefaultMessageService(repository MessageRepository) *DefaultMessageServi
 }
 
 func (m DefaultMessageService) Store(ctx context.Context, message domain.Message) (string, error) {
-	return m.repository.Store(message)
+	if err := message.Validate(); err != nil {
+		return "", err
+	}
+	return m.repository.Store(ctx, message)
 }

@@ -2,7 +2,9 @@ package repository
 
 import (
 	"api/domain"
+	"context"
 	"encoding/json"
+	"sync"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -12,6 +14,7 @@ const queueName = "southpark_messages"
 type RabbitMQMessageRepository struct {
 	connection *amqp.Connection
 	channel    *amqp.Channel
+	mu         sync.Mutex
 }
 
 func NewRabbitMQMessageRepository(url string) (*RabbitMQMessageRepository, error) {
@@ -46,13 +49,17 @@ func NewRabbitMQMessageRepository(url string) (*RabbitMQMessageRepository, error
 	}, nil
 }
 
-func (r RabbitMQMessageRepository) Store(message domain.Message) (string, error) {
+func (r *RabbitMQMessageRepository) Store(ctx context.Context, message domain.Message) (string, error) {
 	body, err := json.Marshal(message)
 	if err != nil {
 		return "", err
 	}
 
-	err = r.channel.Publish(
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	err = r.channel.PublishWithContext(
+		ctx,
 		"",
 		queueName,
 		false,
